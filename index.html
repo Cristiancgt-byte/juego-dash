@@ -2,64 +2,39 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Juego Shooter con Tienda</title>
+  <title>Shooter con Tienda y Enemigos Nuevos</title>
   <style>
-    body { 
-      margin: 0; 
-      background: #111; 
-      color: white; 
-      font-family: sans-serif; 
-      text-align: center; 
-    }
-    canvas { 
-      background: #000; 
-      display: block; 
-      margin: 10px auto; 
-      border: 2px solid white; 
-    }
+    body { margin: 0; background: #111; color: white; font-family: sans-serif; text-align: center; }
+    canvas { background: #000; display: block; margin: 10px auto; border: 2px solid white; }
     #ui { margin-top: 10px; }
-    button { padding: 10px 20px; margin: 5px; font-size: 16px; cursor: pointer; }
-    #shop {
-      display: none;
-      position: absolute;
-      top: 50px; left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.9);
-      padding: 20px;
-      border: 2px solid white;
-      border-radius: 10px;
-    }
-    #shop h2 { margin-top: 0; }
-    #shop button { display: block; margin: 10px auto; }
+    button { padding: 10px 20px; margin: 5px; font-size: 16px; cursor: pointer; border-radius: 8px; border: none; }
+    #shop { display:none; background:#222; padding:20px; margin:10px auto; width:80%; border-radius:10px; }
+    #shop button { display:block; margin:10px auto; width:60%; }
   </style>
 </head>
 <body>
-  <h1>Shooter con Tienda 🛒</h1>
+  <h1>Shooter con Tienda 🚀</h1>
   <canvas id="gameCanvas" width="600" height="400"></canvas>
   <div id="ui">
     <button id="startBtn">Comenzar</button>
     <button id="restartBtn" style="display:none;">Reiniciar</button>
-    <p>Presiona <b>T</b> para abrir la tienda</p>
+    <button id="shopBtn" style="display:none;">Tienda 🛒</button>
+    <p id="info"></p>
   </div>
-
-  <!-- Tienda -->
   <div id="shop">
-    <h2>🛒 Tienda</h2>
-    <p id="coinsText">Monedas: 0</p>
-    <button onclick="buy('color')">Cambiar color jugador (10)</button>
-    <button onclick="buy('life')">+1 Vida (20)</button>
-    <button onclick="buy('bg')">Cambiar fondo (15)</button>
-    <button onclick="buy('enemyColor')">Cambiar color enemigos (15)</button>
-    <button onclick="buy('burst')">Mejorar ráfaga (30)</button>
+    <h2>Tienda</h2>
+    <button onclick="buy('color')">Cambiar color del jugador (50 monedas)</button>
+    <button onclick="buy('vida')">Comprar vida extra (75 monedas)</button>
+    <button onclick="buy('fondo')">Cambiar color de fondo (50 monedas)</button>
+    <button onclick="buy('enemigo')">Cambiar color de enemigos (50 monedas)</button>
+    <button onclick="buy('rafaga')">Mejorar ráfaga de disparo (80 monedas)</button>
+    <button onclick="buy('dobleCoins')">Mejora: x2 monedas por enemigo (100 monedas)</button>
     <button onclick="closeShop()">Cerrar</button>
   </div>
 
 <script>
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
-const shopDiv = document.getElementById("shop");
-const coinsText = document.getElementById("coinsText");
-
 let game;
 
 // === Clases ===
@@ -72,7 +47,6 @@ class Player {
     this.lives = 3;
     this.shield = false;
     this.color = "lime";
-    this.burst = 1; // balas simultáneas
   }
   draw(){
     ctx.fillStyle = this.shield ? "cyan" : this.color;
@@ -92,14 +66,23 @@ class Bullet {
 }
 
 class Enemy {
-  constructor(x,y,color){
+  constructor(x,y,type="square"){
     this.x=x; this.y=y; this.size=20; this.dy=1+Math.random()*1.5;
-    this.color=color;
+    this.type=type; // "square" o "triangle"
   }
   update(){ this.y+=this.dy; }
   draw(){
-    ctx.fillStyle=this.color;
-    ctx.fillRect(this.x-this.size/2, this.y-this.size/2, this.size, this.size);
+    ctx.fillStyle=game.enemyColor;
+    if(this.type==="square"){
+      ctx.fillRect(this.x-this.size/2, this.y-this.size/2, this.size, this.size);
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(this.x, this.y-this.size/2);
+      ctx.lineTo(this.x-this.size/2, this.y+this.size/2);
+      ctx.lineTo(this.x+this.size/2, this.y+this.size/2);
+      ctx.closePath();
+      ctx.fill();
+    }
   }
 }
 
@@ -132,22 +115,17 @@ function init(){
     tick: 0,
     fireDelay: 20,
     multip: 1,
-    bgColor: "black",
-    enemyColor: "red"
+    bgColor:"#000",
+    enemyColor:"red",
+    coinBoost:1
   };
-  updateCoinsUI();
 }
 
-// === Disparo ===
 function shootBullet(){
-  const burst = game.player.burst;
-  if(burst===1){
-    game.bullets.push(new Bullet(game.player.x, game.player.y-15, -5));
-  } else {
-    for(let i=0;i<burst;i++){
-      let offset = (i-(burst-1)/2)*10;
-      game.bullets.push(new Bullet(game.player.x+offset, game.player.y-15, -5));
-    }
+  game.bullets.push(new Bullet(game.player.x, game.player.y-15, -5));
+  if(game.rafagaLevel && game.rafagaLevel>0){
+    game.bullets.push(new Bullet(game.player.x-10, game.player.y-15, -5));
+    game.bullets.push(new Bullet(game.player.x+10, game.player.y-15, -5));
   }
 }
 
@@ -177,17 +155,10 @@ function update(){
 
   // spawnear enemigos
   if(game.tick%60===0){
-    game.enemies.push(new Enemy(Math.random()*canvas.width, -20, game.enemyColor));
+    let type = Math.random()<0.5 ? "square" : "triangle";
+    game.enemies.push(new Enemy(Math.random()*canvas.width, -20, type));
   }
   game.enemies.forEach(e=>e.update());
-
-  // spawnear pickups
-  if(game.tick%600===0){
-    const types=["rapid","shield","double"];
-    let type=types[Math.floor(Math.random()*types.length)];
-    game.pickups.push(new Pickup(Math.random()*canvas.width, -20, type));
-  }
-  game.pickups.forEach(p=>p.update());
 
   // colisiones balas-enemigos
   for(let b of game.bullets){
@@ -195,8 +166,7 @@ function update(){
       if(Math.abs(b.x-e.x)<15 && Math.abs(b.y-e.y)<15){
         e.dead=true; b.dead=true;
         game.score += 10*game.multip;
-        game.coins += 1; // ganar monedas
-        updateCoinsUI();
+        game.coins += (1*game.coinBoost);
       }
     }
   }
@@ -217,23 +187,6 @@ function update(){
     }
   }
   game.enemies = game.enemies.filter(e=>!e.dead);
-
-  // colisiones pickups
-  for(let p of game.pickups){
-    if(Math.abs(p.x-game.player.x)<20 && Math.abs(p.y-game.player.y)<20){
-      if(p.type==="rapid"){
-        game.fireDelay=5;
-        setTimeout(()=>game.fireDelay=20,5000);
-      } else if(p.type==="shield"){
-        game.player.shield=true;
-      } else if(p.type==="double"){
-        game.multip=2;
-        setTimeout(()=>game.multip=1,5000);
-      }
-      p.dead=true;
-    }
-  }
-  game.pickups = game.pickups.filter(p=>!p.dead);
 }
 
 // === Dibujo ===
@@ -244,14 +197,11 @@ function draw(){
   game.player.draw();
   game.bullets.forEach(b=>b.draw());
   game.enemies.forEach(e=>e.draw());
-  game.pickups.forEach(p=>p.draw());
 
   ctx.fillStyle="white";
   ctx.fillText("Puntos: "+game.score,10,20);
   ctx.fillText("Vidas: "+game.player.lives,10,40);
   ctx.fillText("Monedas: "+game.coins,10,60);
-  if(game.player.shield) ctx.fillText("ESCUDO ACTIVO",10,80);
-  if(game.multip>1) ctx.fillText("DOBLE PUNTOS!",10,100);
 
   if(game.over){
     ctx.fillStyle="red";
@@ -271,55 +221,11 @@ function loop(){
 window.addEventListener("keydown", e=>{
   game.keys[e.key]=true;
   game.keys[e.code]=true;
-
-  if(e.key==="t" || e.key==="T") toggleShop();
 });
 window.addEventListener("keyup", e=>{
   game.keys[e.key]=false;
   game.keys[e.code]=false;
 });
-
-// === Tienda ===
-function toggleShop(){
-  if(shopDiv.style.display==="none"){
-    shopDiv.style.display="block";
-  } else {
-    shopDiv.style.display="none";
-  }
-}
-function closeShop(){
-  shopDiv.style.display="none";
-}
-function updateCoinsUI(){
-  coinsText.textContent = "Monedas: "+game.coins;
-}
-function buy(item){
-  if(item==="color" && game.coins>=10){
-    game.coins-=10;
-    game.player.color = randomColor();
-  }
-  if(item==="life" && game.coins>=20){
-    game.coins-=20;
-    game.player.lives++;
-  }
-  if(item==="bg" && game.coins>=15){
-    game.coins-=15;
-    game.bgColor = randomColor();
-  }
-  if(item==="enemyColor" && game.coins>=15){
-    game.coins-=15;
-    game.enemyColor = randomColor();
-  }
-  if(item==="burst" && game.coins>=30){
-    game.coins-=30;
-    game.player.burst++;
-  }
-  updateCoinsUI();
-}
-function randomColor(){
-  const colors=["lime","blue","orange","pink","purple","yellow","white"];
-  return colors[Math.floor(Math.random()*colors.length)];
-}
 
 // === Botones ===
 document.getElementById("startBtn").onclick=()=>{
@@ -327,10 +233,43 @@ document.getElementById("startBtn").onclick=()=>{
   loop();
   document.getElementById("startBtn").style.display="none";
   document.getElementById("restartBtn").style.display="inline-block";
+  document.getElementById("shopBtn").style.display="inline-block";
 };
 document.getElementById("restartBtn").onclick=()=>{
   init();
 };
+document.getElementById("shopBtn").onclick=()=>{
+  document.getElementById("shop").style.display="block";
+};
+function closeShop(){ document.getElementById("shop").style.display="none"; }
+
+// === Compras ===
+function buy(item){
+  if(item==="color" && game.coins>=50){
+    game.coins-=50;
+    game.player.color = ["lime","blue","orange","pink","white"][Math.floor(Math.random()*5)];
+  }
+  if(item==="vida" && game.coins>=75){
+    game.coins-=75;
+    game.player.lives++;
+  }
+  if(item==="fondo" && game.coins>=50){
+    game.coins-=50;
+    game.bgColor = ["#000","#003","#030","#300","#111"][Math.floor(Math.random()*5)];
+  }
+  if(item==="enemigo" && game.coins>=50){
+    game.coins-=50;
+    game.enemyColor = ["red","purple","yellow","green","cyan"][Math.floor(Math.random()*5)];
+  }
+  if(item==="rafaga" && game.coins>=80){
+    game.coins-=80;
+    game.rafagaLevel = (game.rafagaLevel||0)+1;
+  }
+  if(item==="dobleCoins" && game.coins>=100){
+    game.coins-=100;
+    game.coinBoost=2;
+  }
+}
 </script>
 </body>
 </html>
