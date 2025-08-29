@@ -76,19 +76,11 @@
         padding:8px;border-radius:12px;
       }
       .updown{display:flex;flex-direction:column;gap:8px}
-      #mobile-controls button {
-       font-size: 32px;   /* antes 24px */
-       padding: 25px;     /* antes 15px */
-       border-radius: 50%;
-       border: none;
-       background: rgba(255,255,255,0.25);
-       color: white;
-     }
-      #btn-fire {
-  font-size: 40px;   /* antes 28px */
-  padding: 35px;     /* antes 20px */
-  background: rgba(255,0,0,0.7);
-}
+      #mobile-controls button{
+        pointer-events:auto;
+        font-size:20px;padding:14px;border-radius:50%;border:0;background:rgba(255,255,255,0.06);color:#eaf6ff;
+      }
+      #btn-fire{background:linear-gradient(90deg,#ff7b7b,#ffb86b);color:#021018;font-size:24px;padding:18px}
     }
     /* HUD text */
     #hud{margin-top:6px;color:#cfeffb;font-size:14px}
@@ -118,10 +110,10 @@
       <h2>🛒 Tienda</h2>
       <p>Monedas: <span id="coinsDisplay">0</span></p>
       <div class="shop-grid">
-        <div class="item"><div>Color jugador (50)</div><button onclick="buy('color')">Comprar</button></div>
-        <div class="item"><div>+1 Vida (75)</div><button onclick="buy('vida')">Comprar</button></div>
-        <div class="item"><div>Cambiar fondo (50)</div><button onclick="buy('fondo')">Comprar</button></div>
-        <div class="item"><div>Cambiar color enemigos (50)</div><button onclick="buy('enemigo')">Comprar</button></div>
+        <div class="item"><div>Color jugador (15)</div><button onclick="buy('color')">Comprar</button></div>
+        <div class="item"><div>+1 Vida (50)</div><button onclick="buy('vida')">Comprar</button></div>
+        <div class="item"><div>Cambiar fondo (15)</div><button onclick="buy('fondo')">Comprar</button></div>
+        <div class="item"><div>Cambiar color enemigos (15)</div><button onclick="buy('enemigo')">Comprar</button></div>
         <div class="item"><div>Mejorar ráfaga (80)</div><button onclick="buy('rafaga')">Comprar</button></div>
         <div class="item"><div>Mejora x2 monedas (100)</div><button onclick="buy('dobleCoins')">Comprar</button></div>
       </div>
@@ -445,7 +437,7 @@ function closeShop(){ shopDiv.style.display = 'none'; }
 function buy(item){
   if(!game) return;
   // costs and effects
-  const costs = { color:50, vida:75, fondo:50, enemigo:50, rafaga:80, dobleCoins:100 };
+  const costs = { color:15, vida:50, fondo:15, enemigo:15, rafaga:80, dobleCoins:100 };
   if(game.coins < costs[item]) { alert('No tienes suficientes monedas'); return; }
   game.coins -= costs[item];
 
