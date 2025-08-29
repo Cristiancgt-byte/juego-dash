@@ -1,159 +1,249 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Shooty Power — Juego HTML/CSS/JS</title>
+  <meta charset="UTF-8">
+  <title>Juego Shooter con Power-Ups</title>
   <style>
-    :root{
-      --bg:#0b1020;
-      --panel:#0f1724;
-      --accent:#48c6ef;
-      --accent-2:#7b61ff;
-      --danger:#ff6b6b;
-      --muted:#9aa4b2;
-      --glass: rgba(255,255,255,0.03);
+    body { 
+      margin: 0; 
+      background: #111; 
+      color: white; 
+      font-family: sans-serif; 
+      text-align: center; 
     }
-    *{box-sizing:border-box;font-family:Inter, system-ui, sans-serif}
-    html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#061025);color:#e6eef6}
-    .wrap{min-height:100vh;display:flex;gap:20px;align-items:center;justify-content:center;padding:28px}
-    .card{background:var(--panel);border-radius:14px;padding:14px;box-shadow:0 10px 30px rgba(2,6,23,0.6);width:100%;max-width:1100px;display:grid;grid-template-columns:1fr 320px;gap:14px}
-
-    /* Canvas */
-    #gameCanvas{background:linear-gradient(180deg,#04122566,#02101b);border-radius:10px;width:100%;height:600px;display:block}
-
-    /* Sidebar UI */
-    .sidebar{padding:12px;display:flex;flex-direction:column;gap:10px}
-    h1{font-size:20px;margin:0}
-    .panel{background:var(--glass);padding:10px;border-radius:10px}
-    .stats{display:flex;flex-direction:column;gap:8px}
-    .stat-row{display:flex;justify-content:space-between;font-size:14px}
-    .controls{font-size:13px;color:var(--muted)}
-    .buttons{display:flex;gap:8px}
-    button{background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#021018;border:0;padding:8px 10px;border-radius:8px;font-weight:600;cursor:pointer}
-    button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);font-weight:600}
-    footer{font-size:12px;color:var(--muted);text-align:center;margin-top:auto}
-
-    .power-list{display:flex;flex-direction:column;gap:6px}
-    .power{display:flex;justify-content:space-between;padding:8px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-radius:8px;font-size:13px}
-
-    @media(max-width:900px){.card{grid-template-columns:1fr;}.sidebar{order:2}}
+    canvas { 
+      background: #000; 
+      display: block; 
+      margin: 10px auto; 
+      border: 2px solid white; 
+    }
+    #ui { margin-top: 10px; }
+    button { padding: 10px 20px; margin: 5px; font-size: 16px; cursor: pointer; }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <div>
-        <canvas id="gameCanvas" width="1000" height="600"></canvas>
-      </div>
-      <div class="sidebar">
-        <div class="panel">
-          <h1>Shooty Power</h1>
-          <p class="controls">Controles: Flechas / WASD mover • Barra espaciadora para disparar • P para pausar</p>
-        </div>
-
-        <div class="panel stats">
-          <div class="stat-row"><strong>Puntuación</strong><span id="score">0</span></div>
-          <div class="stat-row"><strong>Vidas</strong><span id="lives">3</span></div>
-          <div class="stat-row"><strong>Nivel</strong><span id="level">1</span></div>
-          <div class="stat-row"><strong>Multiplicador</strong><span id="mult">x1</span></div>
-        </div>
-
-        <div class="panel">
-          <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
-            <div style="font-weight:700">Power-ups</div>
-            <div class="buttons">
-              <button id="startBtn">Comenzar</button>
-              <button class="secondary" id="restartBtn">Reiniciar</button>
-            </div>
-          </div>
-          <div class="power-list" id="powersContainer">
-            <!-- powerup entries -->
-          </div>
-        </div>
-
-        <div class="panel">
-          <div style="font-weight:700;margin-bottom:6px">Descripción rápida</div>
-          <div style="font-size:13px;color:var(--muted)">Sobrevive el mayor tiempo posible, elimina enemigos, recoge power-ups y acumula puntos. Cada nivel sube la dificultad y la cantidad de enemigos.</div>
-        </div>
-
-        <footer>Hecho con ❤️ — ¿Quieres mejoras o más power-ups?</footer>
-      </div>
-    </div>
+  <h1>Shooter con Power-Ups 🚀</h1>
+  <canvas id="gameCanvas" width="600" height="400"></canvas>
+  <div id="ui">
+    <button id="startBtn">Comenzar</button>
+    <button id="restartBtn" style="display:none;">Reiniciar</button>
+    <p id="info"></p>
   </div>
 
 <script>
-/* ---------------------- JUEGO - Shooty Power ---------------------- */
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
 
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
-let cw = canvas.width, ch = canvas.height;
+let game;
 
-// DOM elements
-const scoreEl = document.getElementById('score');
-const livesEl = document.getElementById('lives');
-const levelEl = document.getElementById('level');
-const multEl = document.getElementById('mult');
-const powersContainer = document.getElementById('powersContainer');
-const startBtn = document.getElementById('startBtn');
-const restartBtn = document.getElementById('restartBtn');
+// === Clases ===
+class Player {
+  constructor() {
+    this.x = canvas.width/2;
+    this.y = canvas.height-40;
+    this.size = 20;
+    this.speed = 5;
+    this.lives = 3;
+    this.shield = false;
+  }
+  draw(){
+    ctx.fillStyle = this.shield ? "cyan" : "lime";
+    ctx.fillRect(this.x-this.size/2, this.y-this.size/2, this.size, this.size);
+  }
+}
 
-// Game state
-let game = null;
+class Bullet {
+  constructor(x,y,dy,color="white"){
+    this.x=x; this.y=y; this.dy=dy; this.size=5; this.color=color;
+  }
+  update(){ this.y+=this.dy; }
+  draw(){
+    ctx.fillStyle=this.color;
+    ctx.fillRect(this.x-this.size/2, this.y-this.size/2, this.size, this.size);
+  }
+}
 
-function resetGame(){
+class Enemy {
+  constructor(x,y){
+    this.x=x; this.y=y; this.size=20; this.dy=1+Math.random()*1.5;
+  }
+  update(){ this.y+=this.dy; }
+  draw(){
+    ctx.fillStyle="red";
+    ctx.fillRect(this.x-this.size/2, this.y-this.size/2, this.size, this.size);
+  }
+}
+
+class Pickup {
+  constructor(x,y,type){
+    this.x=x; this.y=y; this.type=type; this.size=15; this.dy=1;
+  }
+  update(){ this.y+=this.dy; }
+  draw(){
+    ctx.fillStyle = this.type==="rapid" ? "yellow" :
+                    this.type==="shield" ? "cyan" : "orange";
+    ctx.beginPath();
+    ctx.arc(this.x,this.y,this.size/2,0,Math.PI*2);
+    ctx.fill();
+  }
+}
+
+// === Inicializar Juego ===
+function init(){
   game = {
-    running: false,
-    score: 0,
-    lives: 3,
-    level: 1,
-    multiplier: 1,
-    player: null,
+    player: new Player(),
     bullets: [],
     enemies: [],
     pickups: [],
+    score: 0,
+    level: 1,
     keys: {},
-    tick: 0,
-    spawnRate: 80,
+    over: false,
     lastShot: 0,
-    baseFireDelay: 18,
-    paused: false,
+    tick: 0,
+    fireDelay: 20,
+    multip: 1
   };
 }
 
-class Player{ /* ... igual que antes ... */ }
-class Bullet{ /* ... igual que antes ... */ }
-class Enemy{ /* ... igual que antes ... */ }
-class Pickup{ /* ... igual que antes ... */ }
-
-// resto del código igual ...
-
-function update(){
-  if(!game.running || game.paused) return;
-  game.tick++;
-
-  // disparar con Espacio (usando e.code)
-  if(game.keys['Space'] && game.tick - game.lastShot > game.baseFireDelay){
-    shootBullet();
-    game.lastShot = game.tick;
-  }
-
-  // resto de update igual ...
+function shootBullet(){
+  game.bullets.push(new Bullet(game.player.x, game.player.y-15, -5));
 }
 
-// Input actualizado
-window.addEventListener('keydown', e=>{
-  game.keys[e.key] = true;
-  game.keys[e.code] = true; // más seguro
-  if(e.key==='p' || e.key==='P'){ game.paused = !game.paused; }
+// === Main Update ===
+function update(){
+  if(game.over) return;
+  game.tick++;
+
+  // movimiento jugador
+  if(game.keys["ArrowLeft"] || game.keys["a"]) game.player.x-=game.player.speed;
+  if(game.keys["ArrowRight"] || game.keys["d"]) game.player.x+=game.player.speed;
+  if(game.keys["ArrowUp"] || game.keys["w"]) game.player.y-=game.player.speed;
+  if(game.keys["ArrowDown"] || game.keys["s"]) game.player.y+=game.player.speed;
+
+  // limites
+  game.player.x = Math.max(0, Math.min(canvas.width, game.player.x));
+  game.player.y = Math.max(0, Math.min(canvas.height, game.player.y));
+
+  // disparo
+  if(game.keys["Space"] && game.tick - game.lastShot > game.fireDelay){
+    shootBullet(); game.lastShot = game.tick;
+  }
+
+  // actualizar balas
+  game.bullets.forEach(b=>b.update());
+  game.bullets = game.bullets.filter(b=>b.y>-10);
+
+  // spawnear enemigos
+  if(game.tick%60===0){
+    game.enemies.push(new Enemy(Math.random()*canvas.width, -20));
+  }
+  game.enemies.forEach(e=>e.update());
+
+  // spawnear pickups
+  if(game.tick%600===0){
+    const types=["rapid","shield","double"];
+    let type=types[Math.floor(Math.random()*types.length)];
+    game.pickups.push(new Pickup(Math.random()*canvas.width, -20, type));
+  }
+  game.pickups.forEach(p=>p.update());
+
+  // colisiones balas-enemigos
+  for(let b of game.bullets){
+    for(let e of game.enemies){
+      if(Math.abs(b.x-e.x)<15 && Math.abs(b.y-e.y)<15){
+        e.dead=true; b.dead=true;
+        game.score += 10*game.multip;
+      }
+    }
+  }
+  game.bullets = game.bullets.filter(b=>!b.dead);
+  game.enemies = game.enemies.filter(e=>!e.dead);
+
+  // colisiones enemigo-jugador
+  for(let e of game.enemies){
+    if(Math.abs(e.x-game.player.x)<20 && Math.abs(e.y-game.player.y)<20){
+      if(game.player.shield){
+        e.dead=true;
+        game.player.shield=false;
+      } else {
+        e.dead=true;
+        game.player.lives--;
+        if(game.player.lives<=0) game.over=true;
+      }
+    }
+  }
+  game.enemies = game.enemies.filter(e=>!e.dead);
+
+  // colisiones pickups
+  for(let p of game.pickups){
+    if(Math.abs(p.x-game.player.x)<20 && Math.abs(p.y-game.player.y)<20){
+      if(p.type==="rapid"){
+        game.fireDelay=5;
+        setTimeout(()=>game.fireDelay=20,5000);
+      } else if(p.type==="shield"){
+        game.player.shield=true;
+      } else if(p.type==="double"){
+        game.multip=2;
+        setTimeout(()=>game.multip=1,5000);
+      }
+      p.dead=true;
+    }
+  }
+  game.pickups = game.pickups.filter(p=>!p.dead);
+}
+
+// === Dibujo ===
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  game.player.draw();
+  game.bullets.forEach(b=>b.draw());
+  game.enemies.forEach(e=>e.draw());
+  game.pickups.forEach(p=>p.draw());
+
+  ctx.fillStyle="white";
+  ctx.fillText("Puntos: "+game.score,10,20);
+  ctx.fillText("Vidas: "+game.player.lives,10,40);
+  if(game.player.shield) ctx.fillText("ESCUDO ACTIVO",10,60);
+  if(game.multip>1) ctx.fillText("DOBLE PUNTOS!",10,80);
+
+  if(game.over){
+    ctx.fillStyle="red";
+    ctx.font="30px sans-serif";
+    ctx.fillText("GAME OVER", canvas.width/2-80, canvas.height/2);
+  }
+}
+
+// === Loop ===
+function loop(){
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// === Input ===
+window.addEventListener("keydown", e=>{
+  game.keys[e.key]=true;
+  game.keys[e.code]=true;
 });
-window.addEventListener('keyup', e=>{
+window.addEventListener("keyup", e=>{
   game.keys[e.key]=false;
   game.keys[e.code]=false;
 });
 
-// resto del código igual ...
-
+// === Botones ===
+document.getElementById("startBtn").onclick=()=>{
+  init();
+  loop();
+  document.getElementById("startBtn").style.display="none";
+  document.getElementById("restartBtn").style.display="inline-block";
+};
+document.getElementById("restartBtn").onclick=()=>{
+  init();
+};
 </script>
 </body>
 </html>
+
+
