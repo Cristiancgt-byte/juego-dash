@@ -19,61 +19,46 @@
     }
     #ui { margin-top: 10px; }
     button { padding: 10px 20px; margin: 5px; font-size: 16px; cursor: pointer; }
-    #shop { 
-      display: none; 
-      margin-top: 20px; 
-      background: #222; 
-      padding: 15px; 
-      border: 2px solid white; 
-      width: 300px; 
-      margin-left: auto; 
-      margin-right: auto;
+    #shop {
+      display: none;
+      position: absolute;
+      top: 50px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.9);
+      padding: 20px;
+      border: 2px solid white;
       border-radius: 10px;
     }
-    .item { 
-      margin: 10px; 
-      padding: 10px; 
-      background: #333; 
-      border-radius: 5px;
-    }
+    #shop h2 { margin-top: 0; }
+    #shop button { display: block; margin: 10px auto; }
   </style>
 </head>
 <body>
-  <h1>Shooter con Tienda 🚀</h1>
+  <h1>Shooter con Tienda 🛒</h1>
   <canvas id="gameCanvas" width="600" height="400"></canvas>
   <div id="ui">
     <button id="startBtn">Comenzar</button>
     <button id="restartBtn" style="display:none;">Reiniciar</button>
-    <button id="shopBtn" style="display:none;">Tienda</button>
-    <p id="info"></p>
+    <p>Presiona <b>T</b> para abrir la tienda</p>
   </div>
 
   <!-- Tienda -->
   <div id="shop">
-    <h2>Tienda 🛒</h2>
-    <p>Monedas: <span id="coinsDisplay">0</span></p>
-    <div class="item">
-      <p>Color Azul (precio: 30)</p>
-      <button onclick="buyColor('blue',30)">Comprar</button>
-    </div>
-    <div class="item">
-      <p>Color Naranja (precio: 50)</p>
-      <button onclick="buyColor('orange',50)">Comprar</button>
-    </div>
-    <div class="item">
-      <p>Color rojo (precio: 25)</p>
-      <button onclick="buyColor('red',70)">Comprar</button>
-    </div>
-    <div class="item">
-      <p>Color Morado (precio: 80)</p>
-      <button onclick="buyColor('purple',80)">Comprar</button>
-    </div>
+    <h2>🛒 Tienda</h2>
+    <p id="coinsText">Monedas: 0</p>
+    <button onclick="buy('color')">Cambiar color jugador (10)</button>
+    <button onclick="buy('life')">+1 Vida (20)</button>
+    <button onclick="buy('bg')">Cambiar fondo (15)</button>
+    <button onclick="buy('enemyColor')">Cambiar color enemigos (15)</button>
+    <button onclick="buy('burst')">Mejorar ráfaga (30)</button>
     <button onclick="closeShop()">Cerrar</button>
   </div>
 
 <script>
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
+const shopDiv = document.getElementById("shop");
+const coinsText = document.getElementById("coinsText");
 
 let game;
 
@@ -86,7 +71,8 @@ class Player {
     this.speed = 5;
     this.lives = 3;
     this.shield = false;
-    this.color = "lime"; // color base
+    this.color = "lime";
+    this.burst = 1; // balas simultáneas
   }
   draw(){
     ctx.fillStyle = this.shield ? "cyan" : this.color;
@@ -106,12 +92,13 @@ class Bullet {
 }
 
 class Enemy {
-  constructor(x,y){
+  constructor(x,y,color){
     this.x=x; this.y=y; this.size=20; this.dy=1+Math.random()*1.5;
+    this.color=color;
   }
   update(){ this.y+=this.dy; }
   draw(){
-    ctx.fillStyle="red";
+    ctx.fillStyle=this.color;
     ctx.fillRect(this.x-this.size/2, this.y-this.size/2, this.size, this.size);
   }
 }
@@ -144,12 +131,24 @@ function init(){
     lastShot: 0,
     tick: 0,
     fireDelay: 20,
-    multip: 1
+    multip: 1,
+    bgColor: "black",
+    enemyColor: "red"
   };
+  updateCoinsUI();
 }
 
+// === Disparo ===
 function shootBullet(){
-  game.bullets.push(new Bullet(game.player.x, game.player.y-15, -5));
+  const burst = game.player.burst;
+  if(burst===1){
+    game.bullets.push(new Bullet(game.player.x, game.player.y-15, -5));
+  } else {
+    for(let i=0;i<burst;i++){
+      let offset = (i-(burst-1)/2)*10;
+      game.bullets.push(new Bullet(game.player.x+offset, game.player.y-15, -5));
+    }
+  }
 }
 
 // === Main Update ===
@@ -178,7 +177,7 @@ function update(){
 
   // spawnear enemigos
   if(game.tick%60===0){
-    game.enemies.push(new Enemy(Math.random()*canvas.width, -20));
+    game.enemies.push(new Enemy(Math.random()*canvas.width, -20, game.enemyColor));
   }
   game.enemies.forEach(e=>e.update());
 
@@ -196,7 +195,8 @@ function update(){
       if(Math.abs(b.x-e.x)<15 && Math.abs(b.y-e.y)<15){
         e.dead=true; b.dead=true;
         game.score += 10*game.multip;
-        game.coins += 5; // gana monedas
+        game.coins += 1; // ganar monedas
+        updateCoinsUI();
       }
     }
   }
@@ -238,7 +238,8 @@ function update(){
 
 // === Dibujo ===
 function draw(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle=game.bgColor;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
 
   game.player.draw();
   game.bullets.forEach(b=>b.draw());
@@ -249,7 +250,6 @@ function draw(){
   ctx.fillText("Puntos: "+game.score,10,20);
   ctx.fillText("Vidas: "+game.player.lives,10,40);
   ctx.fillText("Monedas: "+game.coins,10,60);
-
   if(game.player.shield) ctx.fillText("ESCUDO ACTIVO",10,80);
   if(game.multip>1) ctx.fillText("DOBLE PUNTOS!",10,100);
 
@@ -271,6 +271,8 @@ function loop(){
 window.addEventListener("keydown", e=>{
   game.keys[e.key]=true;
   game.keys[e.code]=true;
+
+  if(e.key==="t" || e.key==="T") toggleShop();
 });
 window.addEventListener("keyup", e=>{
   game.keys[e.key]=false;
@@ -278,22 +280,46 @@ window.addEventListener("keyup", e=>{
 });
 
 // === Tienda ===
-function buyColor(color, price){
-  if(game.coins>=price){
-    game.coins-=price;
-    game.player.color=color;
-    document.getElementById("coinsDisplay").textContent=game.coins;
+function toggleShop(){
+  if(shopDiv.style.display==="none"){
+    shopDiv.style.display="block";
   } else {
-    alert("No tienes suficientes monedas!");
+    shopDiv.style.display="none";
   }
 }
 function closeShop(){
-  document.getElementById("shop").style.display="none";
+  shopDiv.style.display="none";
 }
-document.getElementById("shopBtn").onclick=()=>{
-  document.getElementById("shop").style.display="block";
-  document.getElementById("coinsDisplay").textContent=game.coins;
-};
+function updateCoinsUI(){
+  coinsText.textContent = "Monedas: "+game.coins;
+}
+function buy(item){
+  if(item==="color" && game.coins>=10){
+    game.coins-=10;
+    game.player.color = randomColor();
+  }
+  if(item==="life" && game.coins>=20){
+    game.coins-=20;
+    game.player.lives++;
+  }
+  if(item==="bg" && game.coins>=15){
+    game.coins-=15;
+    game.bgColor = randomColor();
+  }
+  if(item==="enemyColor" && game.coins>=15){
+    game.coins-=15;
+    game.enemyColor = randomColor();
+  }
+  if(item==="burst" && game.coins>=30){
+    game.coins-=30;
+    game.player.burst++;
+  }
+  updateCoinsUI();
+}
+function randomColor(){
+  const colors=["lime","blue","orange","pink","purple","yellow","white"];
+  return colors[Math.floor(Math.random()*colors.length)];
+}
 
 // === Botones ===
 document.getElementById("startBtn").onclick=()=>{
@@ -301,7 +327,6 @@ document.getElementById("startBtn").onclick=()=>{
   loop();
   document.getElementById("startBtn").style.display="none";
   document.getElementById("restartBtn").style.display="inline-block";
-  document.getElementById("shopBtn").style.display="inline-block";
 };
 document.getElementById("restartBtn").onclick=()=>{
   init();
