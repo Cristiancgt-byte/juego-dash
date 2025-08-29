@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Shooty Power — Juego HTML/CSS/JS</title>
+  <style>
+    :root{
+      --bg:#0b1020;
+      --panel:#0f1724;
+      --accent:#48c6ef;
+      --accent-2:#7b61ff;
+      --danger:#ff6b6b;
+      --muted:#9aa4b2;
+      --glass: rgba(255,255,255,0.03);
+    }
+    *{box-sizing:border-box;font-family:Inter, system-ui, sans-serif}
+    html,body{height:100%;margin:0;background:linear-gradient(180deg,var(--bg),#061025);color:#e6eef6}
+    .wrap{min-height:100vh;display:flex;gap:20px;align-items:center;justify-content:center;padding:28px}
+    .card{background:var(--panel);border-radius:14px;padding:14px;box-shadow:0 10px 30px rgba(2,6,23,0.6);width:100%;max-width:1100px;display:grid;grid-template-columns:1fr 320px;gap:14px}
+
+    /* Canvas */
+    #gameCanvas{background:linear-gradient(180deg,#04122566,#02101b);border-radius:10px;width:100%;height:600px;display:block}
+
+    /* Sidebar UI */
+    .sidebar{padding:12px;display:flex;flex-direction:column;gap:10px}
+    h1{font-size:20px;margin:0}
+    .panel{background:var(--glass);padding:10px;border-radius:10px}
+    .stats{display:flex;flex-direction:column;gap:8px}
+    .stat-row{display:flex;justify-content:space-between;font-size:14px}
+    .controls{font-size:13px;color:var(--muted)}
+    .buttons{display:flex;gap:8px}
+    button{background:linear-gradient(90deg,var(--accent),var(--accent-2));color:#021018;border:0;padding:8px 10px;border-radius:8px;font-weight:600;cursor:pointer}
+    button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);font-weight:600}
+    footer{font-size:12px;color:var(--muted);text-align:center;margin-top:auto}
+
+    .power-list{display:flex;flex-direction:column;gap:6px}
+    .power{display:flex;justify-content:space-between;padding:8px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-radius:8px;font-size:13px}
+
+    @media(max-width:900px){.card{grid-template-columns:1fr;}.sidebar{order:2}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div>
+        <canvas id="gameCanvas" width="1000" height="600"></canvas>
+      </div>
+      <div class="sidebar">
+        <div class="panel">
+          <h1>Shooty Power</h1>
+          <p class="controls">Controles: Flechas / WASD mover • Barra espaciadora para disparar • P para pausar</p>
+        </div>
+
+        <div class="panel stats">
+          <div class="stat-row"><strong>Puntuación</strong><span id="score">0</span></div>
+          <div class="stat-row"><strong>Vidas</strong><span id="lives">3</span></div>
+          <div class="stat-row"><strong>Nivel</strong><span id="level">1</span></div>
+          <div class="stat-row"><strong>Multiplicador</strong><span id="mult">x1</span></div>
+        </div>
+
+        <div class="panel">
+          <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
+            <div style="font-weight:700">Power-ups</div>
+            <div class="buttons">
+              <button id="startBtn">Comenzar</button>
+              <button class="secondary" id="restartBtn">Reiniciar</button>
+            </div>
+          </div>
+          <div class="power-list" id="powersContainer">
+            <!-- powerup entries -->
+          </div>
+        </div>
+
+        <div class="panel">
+          <div style="font-weight:700;margin-bottom:6px">Descripción rápida</div>
+          <div style="font-size:13px;color:var(--muted)">Sobrevive el mayor tiempo posible, elimina enemigos, recoge power-ups y acumula puntos. Cada nivel sube la dificultad y la cantidad de enemigos.</div>
+        </div>
+
+        <footer>Hecho con ❤️ — ¿Quieres mejoras o más power-ups?</footer>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ---------------------- JUEGO - Shooty Power ----------------------
+   - Juego tipo shooter con canvas
+   - Power-ups: Rapid Fire, Shield, Double Points
+   - HUD, start/restart, niveles, dificultad creciente
+   - No assets externos (todo dibujado en canvas)
+------------------------------------------------------------------*/
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let cw = canvas.width, ch = canvas.height;
+
+// DOM elements
+const scoreEl = document.getElementById('score');
+const livesEl = document.getElementById('lives');
+const levelEl = document.getElementById('level');
+const multEl = document.getElementById('mult');
+const powersContainer = document.getElementById('powersContainer');
+const startBtn = document.getElementById('startBtn');
+const restartBtn = document.getElementById('restartBtn');
+
+// Game state
+let game = null;
+
+function resetGame(){
+  game = {
+    running: false,
+    score: 0,
+    lives: 3,
+    level: 1,
+    multiplier: 1,
+    player: null,
+    bullets: [],
+    enemies: [],
+    pickups: [],
+    keys: {},
+    tick: 0,
+    spawnRate: 80, // lower is faster
+    lastShot: 0,
+    baseFireDelay: 18,
+    paused: false,
+  };
+}
+
+class Player{
+  constructor(x,y){
+    this.x = x; this.y = y; this.w = 36; this.h = 20;
+    this.speed = 4.2; this.color = '#48c6ef';
+    this.shield = 0; // shield frames
+    this.invulnerable = 0;
+  }
+  draw(){
+    ctx.save();
+    ctx.translate(this.x,this.y);
+    // body
+    ctx.beginPath();
+    ctx.moveTo(-this.w/2, this.h/2);
+    ctx.lineTo(this.w/2, 0);
+    ctx.lineTo(-this.w/2, -this.h/2);
+    ctx.closePath();
+    ctx.fillStyle = this.shield>0 ? 'rgba(123,97,255,0.95)' : this.color;
+    ctx.fill();
+    // shield halo
+    if(this.shield>0){
+      ctx.beginPath();
+      ctx.arc(0,0,30,0,Math.PI*2);
+      ctx.strokeStyle = 'rgba(123,97,255,0.12)';
+      ctx.lineWidth = 8; ctx.stroke();
+    }
+    ctx.restore();
+  }
+  update(){
+    // keyboard movement
+    if(game.keys['ArrowLeft']||game.keys['a']) this.x -= this.speed;
+    if(game.keys['ArrowRight']||game.keys['d']) this.x += this.speed;
+    if(game.keys['ArrowUp']||game.keys['w']) this.y -= this.speed;
+    if(game.keys['ArrowDown']||game.keys['s']) this.y += this.speed;
+    // clamp
+    this.x = Math.max(20, Math.min(cw-20, this.x));
+    this.y = Math.max(20, Math.min(ch-20, this.y));
+    if(this.shield>0) this.shield--;
+    if(this.invulnerable>0) this.invulnerable--;
+  }
+}
+
+class Bullet{
+  constructor(x,y,dx,dy,owner='player'){
+    this.x=x;this.y=y;this.dx=dx;this.dy=dy;this.r=5;this.owner=owner;
+  }
+  update(){this.x+=this.dx;this.y+=this.dy}
+  draw(){
+    ctx.beginPath();ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
+    ctx.fillStyle = this.owner==='player' ? '#fff' : '#ff7b7b';ctx.fill();
+  }
+}
+
+class Enemy{
+  constructor(x,y,type=0){
+    this.x=x;this.y=y;this.w=28;this.h=18;this.type=type;
+    this.speed = 1.2 + Math.random()*1.5 + (game.level-1)*0.25;
+    this.hp = 1 + Math.floor((game.level-1)/2);
+    this.dir = Math.random()<0.5?-1:1;
+    this.shootTimer = Math.random()*120;
+  }
+  update(){
+    this.y += this.speed;
+    if(this.type===1) this.x += Math.sin(game.tick/20)*1.6; // zigzag
+    if(this.shootTimer-- <=0){
+      this.shootTimer = 120 + Math.random()*120;
+      // enemy shoots
+      game.bullets.push(new Bullet(this.x,this.y,Math.sin(Math.random()*2-1)*1.8,3,'enemy'));
+    }
+  }
+  draw(){
+    ctx.save(); ctx.translate(this.x,this.y);
+    ctx.fillStyle = '#ff6b6b';
+    ctx.fillRect(-this.w/2,-this.h/2,this.w,this.h);
+    ctx.restore();
+  }
+}
+
+class Pickup{
+  constructor(x,y,kind){this.x=x;this.y=y;this.kind=kind;this.r=12;this.speed=1.2}
+  update(){this.y += this.speed}
+  draw(){
+    ctx.beginPath();ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
+    if(this.kind==='rapid') ctx.fillStyle='#7b61ff';
+    else if(this.kind==='shield') ctx.fillStyle='#61ffb8';
+    else if(this.kind==='double') ctx.fillStyle='#ffd166';
+    else ctx.fillStyle='#9aa4b2';
+    ctx.fill();
+    ctx.fillStyle='#021018';ctx.font='11px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    const label = {'rapid':'R','shield':'S','double':'x2'}[this.kind]||'?';
+    ctx.fillText(label,this.x,this.y);
+  }
+}
+
+// Utility functions
+function randRange(a,b){return a + Math.random()*(b-a)}
+
+function spawnEnemy(){
+  const x = randRange(30,cw-30);
+  const type = Math.random()<0.25 ? 1 : 0; // some zigzaggers
+  game.enemies.push(new Enemy(x,-20,type));
+}
+
+function spawnPickup(x,y){
+  const r = Math.random();
+  const kind = r<0.35 ? 'rapid' : r<0.65 ? 'shield' : 'double';
+  game.pickups.push(new Pickup(x,y,kind));
+}
+
+function applyPower(kind){
+  // show in sidebar
+  const el = document.createElement('div');el.className='power';
+  const map = {rapid:'Fuego rápido (más disparos)',shield:'Escudo (absorbe daño)',double:'Puntos x2 temporales'};
+  el.innerHTML = `<div>${map[kind]||kind}</div><div style='opacity:0.9'>activado</div>`;
+  powersContainer.prepend(el);
+  setTimeout(()=>{el.remove()},5000);
+
+  if(kind==='rapid'){
+    game.baseFireDelay = Math.max(6, game.baseFireDelay-8);
+    setTimeout(()=>{game.baseFireDelay += 8},10000);
+  }
+  if(kind==='shield'){
+    game.player.shield = 360; // lasts
+  }
+  if(kind==='double'){
+    game.multiplier = 2; multEl.textContent = 'x2';
+    setTimeout(()=>{game.multiplier = 1; multEl.textContent='x1'},12000);
+  }
+}
+
+// Collision helpers
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+
+function startGame(){
+  resetGame();
+  game.running = true;game.paused=false;game.tick=0;
+  game.player = new Player(cw/2,ch-80);
+  // initial enemies
+  for(let i=0;i<4;i++) spawnEnemy();
+  loop();
+}
+
+function endGame(){
+  game.running=false;
+  // show overlay
+  ctx.save();ctx.fillStyle='rgba(0,0,0,0.6)';ctx.fillRect(0,0,cw,ch);
+  ctx.fillStyle='#fff';ctx.font='28px sans-serif';ctx.textAlign='center';ctx.fillText('GAME OVER',cw/2,ch/2-20);
+  ctx.font='16px sans-serif';ctx.fillText(`Puntuación: ${game.score}`,cw/2,ch/2+10);
+  ctx.restore();
+}
+
+function update(){
+  if(!game.running || game.paused) return;
+  game.tick++;
+
+  // spawn logic
+  if(game.tick % Math.max(8, Math.floor(game.spawnRate - game.level*4)) === 0){
+    spawnEnemy();
+  }
+
+  // update player
+  game.player.update();
+
+  // shooting
+  if((game.keys[' '] || game.keys['Space'] || game.keys['Spacebar']) && game.tick - game.lastShot > game.baseFireDelay){
+    shootBullet(); game.lastShot = game.tick;
+  }
+
+  // update bullets
+  for(let b of game.bullets) b.update();
+  game.bullets = game.bullets.filter(b=>b.x>-50 && b.x<cw+50 && b.y>-50 && b.y<ch+50);
+
+  // update enemies
+  for(let e of game.enemies) e.update();
+  game.enemies = game.enemies.filter(e=>e.y < ch+60 && e.hp>0);
+
+  // pickups
+  for(let p of game.pickups) p.update();
+  game.pickups = game.pickups.filter(p=>p.y < ch+40);
+
+  // collisions: player bullets vs enemies
+  for(let i=game.bullets.length-1;i>=0;i--){
+    const b = game.bullets[i];
+    if(b.owner !== 'player') continue;
+    for(let j=game.enemies.length-1;j>=0;j--){
+      const en = game.enemies[j];
+      if(Math.hypot(b.x-en.x,b.y-en.y) < 20){
+        en.hp--; game.bullets.splice(i,1);
+        if(en.hp<=0){
+          // score
+          game.score += 10 * game.multiplier;
+          // chance to drop pickup
+          if(Math.random() < 0.25) spawnPickup(en.x,en.y);
+          // small explosion: spawn 2 smaller enemies sometimes
+          if(Math.random()<0.12) spawnEnemy();
+        }
+        break;
+      }
+    }
+  }
+
+  // enemy bullets vs player & enemies vs player
+  for(let i=game.bullets.length-1;i>=0;i--){
+    const b = game.bullets[i];
+    if(b.owner==='enemy' && Math.hypot(b.x-game.player.x,b.y-game.player.y) < 26){
+      game.bullets.splice(i,1);
+      if(game.player.shield>0) {game.player.shield = Math.max(0, game.player.shield-60);} else if(game.player.invulnerable<=0){
+        game.lives--; game.player.invulnerable = 90; playBeep(120,0.07);
+      }
+    }
+  }
+
+  for(let i=game.enemies.length-1;i>=0;i--){
+    const e = game.enemies[i];
+    if(Math.hypot(e.x-game.player.x,e.y-game.player.y) < 26){
+      // collide
+      game.enemies.splice(i,1);
+      if(game.player.shield>0) {game.player.shield = Math.max(0, game.player.shield-60);} else if(game.player.invulnerable<=0){
+        game.lives--; game.player.invulnerable = 90; playBeep(120,0.07);
+      }
+    }
+  }
+
+  // pickups collection
+  for(let i=game.pickups.length-1;i>=0;i--){
+    const p = game.pickups[i];
+    if(Math.hypot(p.x-game.player.x,p.y-game.player.y) < 28){
+      applyPower(p.kind); game.pickups.splice(i,1); playBeep(880,0.06);
+    }
+  }
+
+  // level progression
+  if(game.score > game.level * 100){
+    game.level++; levelEl.textContent = game.level; playBeep(520,0.06);
+    // increase difficulty
+    game.spawnRate = Math.max(30, game.spawnRate - 6);
+    // give a small heal occasionally
+    if(Math.random() < 0.5) game.lives++;
+  }
+
+  // update UI
+  scoreEl.textContent = game.score; livesEl.textContent = game.lives; multEl.textContent = `x${game.multiplier}`;
+
+  if(game.lives <= 0){ endGame(); }
+}
+
+function shootBullet(){
+  // main bullet
+  const spread = 0.4;
+  const speed = -6;
+  const bx = game.player.x; const by = game.player.y - 12;
+  game.bullets.push(new Bullet(bx,by,0,speed,'player'));
+  // small spread if high fire rate
+  if(game.baseFireDelay < 12) game.bullets.push(new Bullet(bx-8,by,-0.9,speed,'player'));
+  if(game.baseFireDelay < 8) game.bullets.push(new Bullet(bx+8,by,0.9,speed,'player'));
+  playBeep(1200,0.02);
+}
+
+function draw(){
+  // clear
+  ctx.clearRect(0,0,cw,ch);
+
+  // background stars
+  for(let i=0;i<60;i++){
+    const x = (i*47 + game.tick*0.3) % cw; const y = (i*31 + game.tick*0.12) % ch;
+    ctx.fillStyle = 'rgba(255,255,255,0.02)'; ctx.fillRect(x,y,1.6,1.6);
+  }
+
+  // draw player bullets
+  for(let b of game.bullets) b.draw();
+
+  // draw enemies
+  for(let e of game.enemies) e.draw();
+
+  // draw pickups
+  for(let p of game.pickups) p.draw();
+
+  // draw player
+  game.player.draw();
+
+  // HUD mini
+  ctx.save();ctx.globalAlpha=0.65;
+  ctx.fillStyle='#000';ctx.fillRect(8,8,160,36);
+  ctx.globalAlpha=1;ctx.fillStyle='#fff';ctx.font='14px sans-serif';ctx.fillText(`Score: ${game.score}`,16,28);
+  ctx.restore();
+
+  // if paused show overlay
+  if(game.paused){
+    ctx.save();ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(0,0,cw,ch);
+    ctx.fillStyle='#fff';ctx.textAlign='center';ctx.font='28px sans-serif';ctx.fillText('PAUSADO',cw/2,ch/2);
+    ctx.restore();
+  }
+}
+
+function loop(){
+  if(!game.running) return;
+  update(); draw();
+  requestAnimationFrame(loop);
+}
+
+// Input
+window.addEventListener('keydown', e=>{
+  game.keys[e.key] = true;
+  if(e.key==='p' || e.key==='P'){ game.paused = !game.paused; }
+});
+window.addEventListener('keyup', e=>{game.keys[e.key]=false});
+
+canvas.addEventListener('mousemove', e=>{
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left; const my = e.clientY - rect.top;
+  if(game && !game.paused){
+    // smooth follow
+    game.player.x += (mx - game.player.x) * 0.12;
+    game.player.y += (my - game.player.y) * 0.06;
+  }
+});
+
+startBtn.addEventListener('click', ()=>{
+  if(!game || !game.running) startGame();
+});
+restartBtn.addEventListener('click', ()=>{ resetGame(); startGame(); });
+
+// Responsive canvas handling
+function fitCanvas(){
+  const containerWidth = Math.min(window.innerWidth-120,1100);
+  // keep original canvas internal size but scale with css
+  canvas.style.width = containerWidth + 'px';
+  canvas.style.height = (containerWidth * ch / cw) + 'px';
+}
+window.addEventListener('resize', fitCanvas);
+
+// small beep generator using WebAudio
+let audioCtx = null;
+function playBeep(freq=440,duration=0.05){
+  try{
+    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine'; o.frequency.value = freq;
+    g.gain.value = 0.07;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+    setTimeout(()=>{o.stop()}, duration*1000 + 30);
+  }catch(e){/* audio not available */}
+}
+
+// init
+resetGame(); fitCanvas();
+// show default powers in list
+powersContainer.innerHTML = `<div class="power"><div>Rapid Fire</div><div style="opacity:0.9">R</div></div>
+<div class="power"><div>Shield</div><div style="opacity:0.9">S</div></div>
+<div class="power"><div>Double Points</div><div style="opacity:0.9">x2</div></div>`;
+
+// auto-start suggestion: don't auto-start; user clicks start
+
+</script>
+</body>
+</html>
