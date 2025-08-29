@@ -116,7 +116,7 @@ function init(){
     fireDelay: 20,
     multip: 1,
     bgColor:"#000",
-    enemyColor:"red",
+    enemyColor:"red","purple",
     coinBoost:1
   };
 }
@@ -259,7 +259,7 @@ function buy(item){
   }
   if(item==="enemigo" && game.coins>=50){
     game.coins-=50;
-    game.enemyColor = ["red","purple","yellow","green","cyan"][Math.floor(Math.random()*5)];
+    game.enemyColor = ["red","purple","yellow","green","cyan","blue","grey"][Math.floor(Math.random()*7)];
   }
   if(item==="rafaga" && game.coins>=80){
     game.coins-=80;
